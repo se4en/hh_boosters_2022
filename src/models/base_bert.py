@@ -23,15 +23,15 @@ class DPBertClassifier(nn.Module):
     def _freeze_bert_layers(self, num_layers: int = 12) -> None:
         if num_layers == 0:
             return
-        modules = [self.bert.embeddings, *self.bert.encoder.layer[:num_layers-1]]
+        modules = [self._bert.embeddings, *self._bert.encoder.layer[:num_layers-1]]
         for module in modules:
             for param in module.parameters():
                 param.requires_grad = False
 
     def forward(self, pos_tokens: torch.Tensor, pos_mask: torch.Tensor, neg_tokens: torch.Tensor,
                 neg_mask: torch.Tensor, ratings: torch.Tensor, target: torch.Tensor = None) -> dict:
-        pos_outputs = self.bert(pos_tokens, token_type_ids=None, attention_mask=pos_mask)[0]
-        neg_outputs = self.bert(neg_tokens, token_type_ids=None, attention_mask=neg_mask)[0]
+        pos_outputs = self._bert(pos_tokens, token_type_ids=None, attention_mask=pos_mask)[0]
+        neg_outputs = self._bert(neg_tokens, token_type_ids=None, attention_mask=neg_mask)[0]
 
         logits = self.head(pos_outputs, neg_outputs, ratings)
 

@@ -30,7 +30,8 @@ def run(cfg: DictConfig) -> None:
     writer = SummaryWriter(f'runs/{cfg.general.experiment_name}')
 
     # init model
-    model = get_object(cfg.model)
+    head = get_object(cfg.model.head)
+    model = get_object(cfg.model.model, head=head)
 
     # init datasets
     train_dataset = get_object(cfg.data.train_data)
@@ -50,11 +51,12 @@ def run(cfg: DictConfig) -> None:
                          num_epochs=num_epochs, batch_size=batch_size, train_dataset=train_dataset,
                          val_dataset=val_dataset)
 
-    trainer.train()
-
-    # save model
-    model_name = 'model.pth'
-    torch.save(model.state_dict(), model_name)
+    try:
+        trainer.train()
+    finally:
+        # save model
+        model_name = 'model.pth'
+        torch.save(model.state_dict(), model_name)
 
     writer.close()
 

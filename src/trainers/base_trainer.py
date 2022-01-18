@@ -68,23 +68,31 @@ class BaseTrainer(Trainer):
 
         return tokens, mask
 
-    def _encode_batch(self, batch: Dict) -> Dict[str, torch.Tensor]:
-        processed_batch = {}
-        processed_batch["pos_tokens"], processed_batch["pos_mask"] = self._encode_texts(batch["positive"])
-        processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(batch["negative"])
+    def _encode_batch(self, batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+        processed_batch = {"ratings": []}
+        if "target" in batch[0]:
+            processed_batch["target"] = []
 
-        print(batch["salary_rating"])
-        # batch["team_rating"]
-        # batch["managment_rating"]
-        # batch["workplace_rating"]
-        # batch["rest_recovery_rating"]
+        pos_texts = []
+        neg_texts = []
 
-        processed_batch["ratings"] = 0  # TODO
+        for sample in batch:
+            pos_texts.append(sample["positive"])
+            neg_texts.append(sample["negative"])
+            if "target" in batch[0]:
+                processed_batch["target"].append(sample["target"])
+            processed_batch["ratings"].append([sample["salary_rating"], sample["team_rating"], 
+                                               sample["managment_rating"], sample["career_rating"], 
+                                               sample["workplace_rating"], sample["rest_recovery_rating"]])
 
-        if "target" in batch:
-            processed_batch["target"] = processed_batch["target"].to(self._device)
+        processed_batch["pos_tokens"], processed_batch["pos_mask"] = self._encode_texts(pos_texts)
+        processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(neg_texts)
 
-        return batch
+        processed_batch["ratings"] = torch.LongTensor(processed_batch["ratings"]).to(self._device)
+        if "target" in batch[0]:
+            processed_batch["target"] = torch.LongTensor(processed_batch["target"]).to(self._device)
+
+        return processed_batch
 
     def _train_epoch(self, epoch: int) -> None:
         # create new dataloaders for data shuffle
@@ -104,6 +112,7 @@ class BaseTrainer(Trainer):
             self._optimizer.zero_grad()
 
             batch = self._encode_batch(batch)
+
             loss = self._batch_loss(batch)
 
             loss.backward()
@@ -120,7 +129,8 @@ class BaseTrainer(Trainer):
             self._writer.add_scalar("Loss/train/batch", train_loss/train_batch_num, self._batch_num)
 
         for name, param in self._model.named_parameters():
-            self._writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
+            if param.requires_grad:
+                self._writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
         val_loss = 0.0
         val_batch_num = 0
