@@ -1,0 +1,17 @@
+defaults:
+  - trainer: base-trainer
+  - optimizer: adamw
+#  - scheduler: linear
+  - model: dp-bert-cased
+  - data: comp-data
+  - training: base-training
+
+general:
+  experiment_name: bert_base_mlps
+
+hydra:
+  run:
+    dir: outputs/${general.experiment_name}
+  sweep:
+    dir: outputs/
+    subdir: ${general.experiment_name}
