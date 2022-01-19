@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 class BaseTrainer(Trainer):
-    def __init__(self, model: BertModel, bert_path: str, optimizer, train_dataset: Dataset, writer: SummaryWriter,
-                 val_dataset: Dataset, batch_size: int = 16, num_epochs: int = 10, use_gpu: bool = True,
-                 max_len: int = 512, num_workers: int = 0, scheduler=None, *args, **kwargs):
+    def __init__(self, model: BertModel, bert_path: str, optimizer = None, train_dataset: Dataset = None, 
+                 writer: SummaryWriter = None, val_dataset: Dataset = None, batch_size: int = 16, num_epochs: int = 10, 
+                 use_gpu: bool = True, max_len: int = 512, num_workers: int = 0, scheduler=None, *args, **kwargs):
         super().__init__(model, *args, **kwargs)
         self._model = model
         self._train_dataset = train_dataset
@@ -33,6 +33,9 @@ class BaseTrainer(Trainer):
                 dev = "cuda:0"
         self._device = torch.device(dev)
         self._model.to(self._device)
+
+    def get_device(self):
+        return self._device
 
     def _batch_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         output_dict = self._model(**batch)
@@ -70,7 +73,7 @@ class BaseTrainer(Trainer):
 
     def _encode_batch(self, batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
         processed_batch = {"ratings": []}
-        if "target" in batch[0]:
+        if batch[0]["target"] is not None:
             processed_batch["target"] = []
 
         pos_texts = []
@@ -79,7 +82,7 @@ class BaseTrainer(Trainer):
         for sample in batch:
             pos_texts.append(sample["positive"])
             neg_texts.append(sample["negative"])
-            if "target" in batch[0]:
+            if batch[0]["target"] is not None:
                 processed_batch["target"].append(sample["target"])
             processed_batch["ratings"].append([sample["salary_rating"], sample["team_rating"], 
                                                sample["managment_rating"], sample["career_rating"], 
@@ -89,7 +92,7 @@ class BaseTrainer(Trainer):
         processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(neg_texts)
 
         processed_batch["ratings"] = torch.LongTensor(processed_batch["ratings"]).to(self._device)
-        if "target" in batch[0]:
+        if batch[0]["target"] is not None:
             processed_batch["target"] = torch.LongTensor(processed_batch["target"]).to(self._device)
 
         return processed_batch

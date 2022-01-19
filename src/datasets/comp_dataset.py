@@ -28,11 +28,11 @@ class CompDataset(Dataset):
                     line[3] = self._decode_company(line[3])
                     line[4] = self._decode_company(line[4])
 
-                if not self._training:
-                    line = line[:-1]  # remove target
-                else:
+                # if not self._training:
+                #     line = line[:-1]  # remove target
+                if self._training:
                     line[-1] = to_one_hot(list(map(int, line[-1].split(","))))
-
+                
                 self._samples.append(FeedbackInstance(*line))
 
     @staticmethod
