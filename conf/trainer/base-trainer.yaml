@@ -1,5 +1,4 @@
-class_name: src.trainers.base_trainer.BaseTrainer
-params:
-  bert_path: DeepPavlov/rubert-base-cased
-  use_gpu: True
-  num_workers: 0
+_target_: src.trainers.base_trainer.BaseTrainer
+bert_path: DeepPavlov/rubert-base-cased
+use_gpu: True
+num_workers: 0

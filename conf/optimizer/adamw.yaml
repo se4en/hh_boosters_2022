@@ -1,3 +1,2 @@
-class_name: transformers.AdamW
-params:
-  lr: 1e-3
+_target_: transformers.AdamW
+lr: 3e-5

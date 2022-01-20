@@ -8,13 +8,18 @@ import warnings
 from omegaconf import DictConfig, OmegaConf, open_dict
 from transformers import get_scheduler
 from torch.utils.tensorboard import SummaryWriter
+from hydra.utils import instantiate
 
 from src.utils.utils import set_seed, get_object
 
 warnings.filterwarnings("ignore")
 
+config_name = "local-training"
+if len(sys.argv) > 1:
+    config_name = sys.argv[1]
 
-@hydra.main(config_path="conf", config_name="local-training")
+
+@hydra.main(config_path="conf", config_name=config_name)
 def run_model(cfg: DictConfig) -> None:
     print(cfg)
     run(cfg)
@@ -30,26 +35,25 @@ def run(cfg: DictConfig) -> None:
     writer = SummaryWriter(f'runs/{cfg.general.experiment_name}')
 
     # init model
-    head = get_object(cfg.model.head)
-    model = get_object(cfg.model.model, head=head)
+    model = instantiate(cfg.model)
 
     # init datasets
-    train_dataset = get_object(cfg.data.train_data)
-    val_dataset = get_object(cfg.data.val_data)
+    train_dataset = instantiate(cfg.data.train_data)
+    val_dataset = instantiate(cfg.data.val_data)
 
     # init optimizer
-    optimizer = get_object(cfg.optimizer, params=model.parameters())
+    optimizer = instantiate(cfg.optimizer, params=model.parameters())
 
     # init scheduler
     scheduler = None
     if "scheduler" in cfg:
-        scheduler = get_scheduler(**cfg.scheduler.params, optimizer=optimizer,
+        scheduler = get_scheduler(**cfg.scheduler, optimizer=optimizer,
                                   num_training_steps=num_epochs * int(len(train_dataset) / batch_size))
 
     # init trainer
-    trainer = get_object(cfg.trainer, model=model, optimizer=optimizer, scheduler=scheduler, writer=writer,
-                         num_epochs=num_epochs, batch_size=batch_size, train_dataset=train_dataset,
-                         val_dataset=val_dataset)
+    trainer = instantiate(cfg.trainer, model=model, optimizer=optimizer, scheduler=scheduler, writer=writer,
+                          num_epochs=num_epochs, batch_size=batch_size, train_dataset=train_dataset,
+                          val_dataset=val_dataset)
 
     try:
         trainer.train()

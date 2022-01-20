@@ -1,3 +1,2 @@
-params:
-  name: "linear"
-  num_warmup_steps: 0
+name: linear
+num_warmup_steps: 0

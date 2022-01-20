@@ -5,7 +5,7 @@ from typing import List, Dict
 import numpy as np
 
 
-class DPBertClassifier(nn.Module):
+class BertClassifier(nn.Module):
     def __init__(self, bert_path: str, head: nn.Module, bert_layers_to_freeze: int = 12):
         super().__init__()
         self._bert = BertModel.from_pretrained(bert_path)
@@ -114,9 +114,12 @@ class DPBertClassifier(nn.Module):
 
 
 class ClsMlp(nn.Module):
-    def __init__(self, in_features: int, num_classes: int = 9):
+    def __init__(self, in_features: int = 1542, num_classes: int = 9, mlp: nn.Module = None):
         super().__init__()
-        self.feedforward = nn.Linear(in_features, num_classes)
+        if mlp is None:
+            self.feedforward = nn.Linear(in_features, num_classes)
+        else:
+            self.feedforward = mlp
 
     def forward(self, pos_outputs: torch.Tensor, neg_outputs: torch.Tensor, ratings: torch.Tensor) -> torch.Tensor:
         norm_ratings = ratings/5 - 0.5

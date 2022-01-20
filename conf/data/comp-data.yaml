@@ -1,20 +1,17 @@
 train_data:
-  class_name: src.datasets.comp_dataset.CompDataset
-  params:
-    path: ../../data/HeadHunter_train.csv
-    training: True
-    decode_companies: True
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ../../data/HeadHunter_train.csv
+  training: True
+  decode_companies: True
 
 val_data:
-  class_name: src.datasets.comp_dataset.CompDataset
-  params:
-    path: ../../data/HeadHunter_val.csv
-    training: True
-    decode_companies: True
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ../../data/HeadHunter_val.csv
+  training: True
+  decode_companies: True
 
 test_data:
-  class_name: src.datasets.comp_dataset.CompDataset
-  params:
-    path: ../../data/HeadHunter_test.csv
-    training: False
-    decode_companies: True
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ../../data/HeadHunter_test.csv
+  training: True
+  decode_companies: True
