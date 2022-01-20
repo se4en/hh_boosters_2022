@@ -1,13 +1,13 @@
 defaults:
   - trainer: base-trainer
   - optimizer: adamw
-#  - scheduler: linear
+  - scheduler: linear
   - model: dp-bert-cased
   - data: comp-data
   - training: base-training
 
 general:
-  experiment_name: dp_bert_mlp
+  experiment_name: test
 
 hydra:
   run:

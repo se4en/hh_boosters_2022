@@ -3,6 +3,7 @@ import torch
 from transformers import Trainer, BertModel, BertTokenizer
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.metrics import f1_score
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,8 @@ logger = logging.getLogger(__name__)
 class BaseTrainer(Trainer):
     def __init__(self, model: BertModel, bert_path: str, optimizer = None, train_dataset: Dataset = None, 
                  writer: SummaryWriter = None, val_dataset: Dataset = None, batch_size: int = 16, num_epochs: int = 10, 
-                 use_gpu: bool = True, max_len: int = 512, num_workers: int = 0, scheduler=None, *args, **kwargs):
+                 use_gpu: bool = True, max_len: int = 512, num_workers: int = 0, treshold: float = 0.5, scheduler=None, 
+                 *args, **kwargs):
         super().__init__(model, *args, **kwargs)
         self._model = model
         self._train_dataset = train_dataset
@@ -21,11 +23,14 @@ class BaseTrainer(Trainer):
         self._optimizer = optimizer
         self._scheduler = scheduler
         self._writer = writer
+        self._treshold = treshold
         self._batch_size = batch_size
         self._num_epochs = num_epochs
         self._max_len = max_len
         self._use_gpu = use_gpu
         self._num_workers = num_workers
+        self._true = []
+        self._pred = []
 
         dev = "cpu"
         if self._use_gpu:
@@ -39,6 +44,20 @@ class BaseTrainer(Trainer):
 
     def _batch_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         output_dict = self._model(**batch)
+        
+        if batch["target"] is not None:  # save labels for metrics
+            class_probs = output_dict["class_probs"]
+            target = batch["target"]
+            for i in range(len(target)):
+                sample_preds = (class_probs[i, :] > self._treshold).nonzero(as_tuple=True)[0]
+
+                if len(sample_preds) == 0:
+                    self._pred.append([torch.argmax(class_probs[i, :]).item()])
+                else:
+                    self._pred.append(sample_preds.tolist())
+
+                self._true.append(target[i, :].tolist())
+
         loss = output_dict["loss"]
         return loss
 
@@ -106,6 +125,8 @@ class BaseTrainer(Trainer):
 
         train_loss = 0.0
         train_batch_num = 0
+        self._true = []
+        self._pred = []
         self._model.train()
 
         for batch in self._train_dataloader:
@@ -131,12 +152,17 @@ class BaseTrainer(Trainer):
 
             self._writer.add_scalar("Loss/train/batch", train_loss/train_batch_num, self._batch_num)
 
+
+        self._writer.add_scalar("F1/train/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
+        
         for name, param in self._model.named_parameters():
             if param.requires_grad:
                 self._writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
 
         val_loss = 0.0
         val_batch_num = 0
+        self._true = []
+        self._pred = []
         self._model.eval()
 
         for batch in self._val_dataloader:
@@ -147,6 +173,8 @@ class BaseTrainer(Trainer):
             val_loss += loss.item()
 
         self._writer.add_scalar("Loss/val/epoch", val_loss/val_batch_num, epoch)
+
+        self._writer.add_scalar("F1/val/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
 
     # def _rescale_gradients(self) -> Optional[float]:
     #     if self._grad_norm:
