@@ -1,6 +1,8 @@
 from transformers import BertModel
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 from typing import List, Dict
 import numpy as np
 
@@ -33,7 +35,7 @@ class BertClassifier(nn.Module):
         pos_outputs = self._bert(pos_tokens, token_type_ids=None, attention_mask=pos_mask)[0]
         neg_outputs = self._bert(neg_tokens, token_type_ids=None, attention_mask=neg_mask)[0]
 
-        logits = self.head(pos_outputs, neg_outputs, ratings)
+        logits = self.head(pos_outputs, pos_mask, neg_outputs, neg_mask, ratings)
 
         result = {"class_probs": torch.sigmoid(logits)}
 
@@ -44,74 +46,102 @@ class BertClassifier(nn.Module):
         return result
 
 
-# class LstmAttention(nn.Module):
-#     def __init__(self, in_features: int, num_classes: int = 9):
-#         super().__init__()
-#         self.lstm = nn.LSTM(input_size=768,
-#                            hidden_size=hidden_size,
-#                            num_layers=self.lstm_layers,
-#                            dropout=dropout,
-#                            bidirectional=bidirectional,
-#                            batch_first=False)
-#         self.feedforward = nn.Linear(in_features, num_classes)
-#
-#     def forward(self, pos_outputs: torch.Tensor, neg_outputs: torch.Tensor, ratings: torch.Tensor) -> torch.Tensor:
-#         norm_ratings = ratings/5 - 0.5
-#         input_features = torch.cat((pos_outputs, neg_outputs, norm_ratings), dim=1)
-#         output_features = self.feedforward(input_features)
-#         class_probs = torch.sigmoid(output_features)
-#
-#         X_batch, x_lens = inputs
-#
-#         # print("X_batch", X_batch)
-#
-#         self.hidden = self.init_hidden()
-#
-#         if torch.isnan(X_batch).any():
-#             print("X before pad contains NAN")
-#             print("X=", X_batch)
-#
-#         X = torch.nn.utils.rnn.pack_padded_sequence(X_batch, x_lens, batch_first=True, enforce_sorted=False)
-#
-#         # if torch.isnan(X).any():
-#         #     print("X after pad contains NAN")
-#
-#         # print("packed X", X)
-#
-#         # now run through LSTM
-#         X, self.hidden = self.rnn(X, self.hidden)
-#
-#         # if torch.isnan(X).any():
-#         #     print("X after lstm contains NAN")
-#
-#         # print("X before UNPAD", X)
-#
-#         # undo the packing operation
-#         X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
-#
-#         if torch.isnan(X).any():
-#             print("X after unpad contains NAN")
-#
-#
-#         cur_logits = self.classifier_feedforward(X[0, :x_lens[0], :])
-#         class_log_probs = F.log_softmax(cur_logits, dim=1)
-#
-#
-#         return class_probs
-#
-#     def init_hidden(self):
-#         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-#         hidden_a = torch.randn(2*self.lstm_layers, self.batch_size, self.hidden_size)
-#         hidden_b = torch.randn(2*self.lstm_layers, self.batch_size, self.hidden_size)
-#
-#         hidden_a = hidden_a.to(self.device)
-#         hidden_b = hidden_b.to(self.device)
-#
-#         hidden_a = Variable(hidden_a)
-#         hidden_b = Variable(hidden_b)
-#
-#         return (hidden_a, hidden_b)
+class LstmAttention(nn.Module):
+    def __init__(self, batch_size: int, pos_lstm: nn.Module, neg_lstm: nn.Module, num_classes: int = 9,
+                 attention: bool = True, mlp: nn.Module = None):
+        super().__init__()
+        self.batch_size = batch_size
+        self._attention = attention
 
+        self._pos_lstm = pos_lstm
+        self._neg_lstm = neg_lstm
+
+        if self._attention:
+            self._pos_attention = Attention(2*self._pos_lstm.hidden_size)
+            self._neg_attention = Attention(2*self._neg_lstm.hidden_size) 
+            # self._pos_attention = nn.MultiheadAttention(2*self._pos_lstm.hidden_size, 1)
+            # self._neg_attention = nn.MultiheadAttention(2*self._neg_lstm.hidden_size, 1)
+        
+        dev = "cpu"
+        if torch.cuda.is_available():  
+            dev = "cuda:0" 
+        self._lstm_device = torch.device(dev) 
+
+        if mlp is None:
+            #  TODO fix dim
+            self.feedforward = nn.Linear(self._pos_lstm.hidden_size + self._neg_lstm.hidden_size + 6, num_classes)
+        else:
+            self.feedforward = mlp
+
+    def forward(self, pos_outputs: torch.Tensor,  pos_mask: torch.Tensor, neg_outputs: torch.Tensor, 
+                neg_mask: torch.Tensor, ratings: torch.Tensor, target: torch.Tensor = None) -> torch.Tensor:
+        
+        norm_ratings = ratings/4 - 0.5
+
+        # print("Pos out shape:", pos_outputs.shape)
+        # print("Pos mask shape:", pos_mask.shape)
+        # print("Neg out shape:", neg_outputs.shape)
+        # print("Neg mask shape:", neg_mask.shape)
+        
+        self._pos_hidden = self.init_pos_hidden()
+        self._neg_hidden = self.init_neg_hidden()
+
+        X_pos = torch.nn.utils.rnn.pack_padded_sequence(pos_outputs, torch.count_nonzero(pos_mask, dim=1).cpu(), 
+                                                        batch_first=True, enforce_sorted=False)
+        X_neg = torch.nn.utils.rnn.pack_padded_sequence(neg_outputs, torch.count_nonzero(neg_mask, dim=1).cpu(), 
+                                                        batch_first=True, enforce_sorted=False)
+        
+        X_pos, self._pos_hidden = self._pos_lstm(X_pos, self._pos_hidden)
+        X_neg, self._neg_hidden = self._neg_lstm(X_neg, self._neg_hidden)
+
+        # undo the packing operation
+        X_pos, _ = torch.nn.utils.rnn.pad_packed_sequence(X_pos, batch_first=True)
+        X_neg, _ = torch.nn.utils.rnn.pad_packed_sequence(X_neg, batch_first=True)
+
+        # print("X_pos shape =", X_pos.shape)
+        # print("X_neg shape =", X_neg.shape)
+
+        if self._attention:
+            # pos_outputs, _ = self._pos_attention(X_pos, X_pos, X_pos)
+            # neg_outputs, _ = self._neg_attention(X_neg, X_neg, X_neg)
+            pos_dist, pos_outputs = self._pos_attention(X_pos, return_attn_distribution=True)
+            neg_dist, neg_outputs = self._neg_attention(X_neg, return_attn_distribution=True)
+
+        # print("pos_outputs shape =", pos_outputs.shape)
+        # print("neg_outputs shape =", neg_outputs.shape)
+        # print("norm_ratings shape =", norm_ratings.shape)
+
+        input_features = torch.cat((pos_outputs, neg_outputs, norm_ratings), dim=1)
+        output_features = self.feedforward(input_features)
+        return output_features
+
+
+    def init_pos_hidden(self):
+        # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
+        hidden_a = torch.randn(2*self._pos_lstm.num_layers, self.batch_size, self._pos_lstm.hidden_size)
+        hidden_b = torch.randn(2*self._pos_lstm.num_layers, self.batch_size, self._pos_lstm.hidden_size)
+
+        hidden_a = hidden_a.to(self._lstm_device)
+        hidden_b = hidden_b.to(self._lstm_device)
+
+        hidden_a = Variable(hidden_a)
+        hidden_b = Variable(hidden_b)
+
+        return (hidden_a, hidden_b)
+
+    def init_neg_hidden(self):
+        # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
+        hidden_a = torch.randn(2*self._neg_lstm.num_layers, self.batch_size, self._neg_lstm.hidden_size)
+        hidden_b = torch.randn(2*self._neg_lstm.num_layers, self.batch_size, self._neg_lstm.hidden_size)
+
+        hidden_a = hidden_a.to(self._lstm_device)
+        hidden_b = hidden_b.to(self._lstm_device)
+
+        hidden_a = Variable(hidden_a)
+        hidden_b = Variable(hidden_b)
+
+        return (hidden_a, hidden_b)
+        
 
 class ClsMlp(nn.Module):
     def __init__(self, in_features: int = 1542, num_classes: int = 9, mlp: nn.Module = None):
@@ -121,9 +151,43 @@ class ClsMlp(nn.Module):
         else:
             self.feedforward = mlp
 
-    def forward(self, pos_outputs: torch.Tensor, neg_outputs: torch.Tensor, ratings: torch.Tensor) -> torch.Tensor:
-        norm_ratings = ratings/5 - 0.5
+    def forward(self, pos_outputs: torch.Tensor, pos_mask: torch.Tensor, neg_outputs: torch.Tensor, 
+                neg_mask: torch.Tensor, ratings: torch.Tensor) -> torch.Tensor:
+        norm_ratings = ratings/4 - 0.5
         input_features = torch.cat((pos_outputs[:, 0, :], neg_outputs[:, 0, :], norm_ratings), dim=1)  # TODO check dim
         output_features = self.feedforward(input_features)
         # class_probs = torch.sigmoid(output_features)
         return output_features
+
+
+def new_parameter(*size):
+    out = nn.Parameter(torch.FloatTensor(*size))
+    torch.nn.init.xavier_normal_(out)
+    return out
+
+class Attention(nn.Module):
+    """ Simple multiplicative attention"""
+    def __init__(self, attention_size):
+        super(Attention, self).__init__()
+        self.attention = new_parameter(attention_size, 1)
+
+    def forward(self, x_in, reduction_dim=-2, return_attn_distribution=False):
+        """
+        return_attn_distribution: if True it will also return the original attention distribution
+        this reduces the one before last dimension in x_in to a weighted sum of the last dimension
+        e.g., x_in.shape == [64, 30, 100] -> output.shape == [64, 100]
+        Usage: You have a sentence of shape [batch, sent_len, embedding_dim] and you want to
+            represent sentence to a single vector using attention [batch, embedding_dim]
+        Here we use it to aggregate the lexicon-aware representation of the sentence
+        In two steps we convert [batch, sent_len, num_words_in_category, num_categories] into [batch, num_categories]
+        """
+        # calculate attn weights
+        attn_score = torch.matmul(x_in, self.attention).squeeze()
+        # add one dimension at the end and get a distribution out of scores
+        attn_distrib = F.softmax(attn_score.squeeze(), dim=-1).unsqueeze(-1)
+        scored_x = x_in * attn_distrib
+        weighted_sum = torch.sum(scored_x, dim=reduction_dim)
+        if return_attn_distribution:
+            return attn_distrib.reshape(x_in.shape[0], -1), weighted_sum
+        else:
+            return weighted_sum

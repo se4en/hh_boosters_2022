@@ -15,6 +15,7 @@ from src.utils.utils import set_seed, get_object
 warnings.filterwarnings("ignore")
 
 config_name = "local-training"
+# config_name = "test"
 if len(sys.argv) > 1:
     config_name = sys.argv[1]
 

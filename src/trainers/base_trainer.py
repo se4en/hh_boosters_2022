@@ -6,6 +6,8 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import f1_score
 import logging
 
+from src.utils.train_test_split import to_one_hot
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,11 +54,11 @@ class BaseTrainer(Trainer):
                 sample_preds = (class_probs[i, :] > self._treshold).nonzero(as_tuple=True)[0]
 
                 if len(sample_preds) == 0:
-                    self._pred.append([torch.argmax(class_probs[i, :]).item()])
+                    self._pred.append(list(to_one_hot([torch.argmax(class_probs[i, :]).item()])))
                 else:
-                    self._pred.append(sample_preds.tolist())
+                    self._pred.append(list(to_one_hot(sample_preds.tolist())))
 
-                self._true.append(target[i, :].tolist())
+                self._true.append(list(to_one_hot(target[i, :].tolist())))
 
         loss = output_dict["loss"]
         return loss

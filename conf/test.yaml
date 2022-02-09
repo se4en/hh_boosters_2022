@@ -7,7 +7,7 @@ defaults:
   - training: base-training
 
 general:
-  experiment_name: bert_10l_lstm_epochs_6
+  experiment_name: test
 
 hydra:
   run:
