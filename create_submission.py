@@ -5,6 +5,7 @@ from hydra import initialize, compose, initialize_config_dir
 
 from src.predictors.base_predictor import Predictor
 from src.utils.utils import get_object, set_seed
+from hydra.utils import instantiate
 
 
 if __name__ == "__main__":
@@ -15,14 +16,13 @@ if __name__ == "__main__":
     cfg = compose(config_name="config")
 
     # init model
-    head = get_object(cfg.model.head)
-    model = get_object(cfg.model.model, head=head)
+    model = instantiate(cfg.model)
     
     # init some params
     batch_size = cfg.training.batch_size
     set_seed(cfg.training.seed)    
-    trainer = get_object(cfg.trainer, model=model, batch_size=batch_size)
-    test_dataset = get_object(cfg.data.test_data)
+    trainer = instantiate(cfg.trainer, model=model, batch_size=batch_size)
+    test_dataset = instantiate(cfg.data.test_data)
 
     # init predictor
     predictor = Predictor(model=model, trainer=trainer, test_dataset=test_dataset)

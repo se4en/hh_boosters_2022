@@ -57,9 +57,8 @@ class BaseTrainer(Trainer):
                     self._pred.append(list(to_one_hot([torch.argmax(class_probs[i, :]).item()])))
                 else:
                     self._pred.append(list(to_one_hot(sample_preds.tolist())))
-
-                self._true.append(list(to_one_hot(target[i, :].tolist())))
-
+                self._true.append(target[i, :].tolist())
+                
         loss = output_dict["loss"]
         return loss
 
@@ -111,7 +110,7 @@ class BaseTrainer(Trainer):
 
         processed_batch["pos_tokens"], processed_batch["pos_mask"] = self._encode_texts(pos_texts)
         processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(neg_texts)
-
+   
         processed_batch["ratings"] = torch.LongTensor(processed_batch["ratings"]).to(self._device)
         if batch[0]["target"] is not None:
             processed_batch["target"] = torch.LongTensor(processed_batch["target"]).to(self._device)
@@ -153,7 +152,6 @@ class BaseTrainer(Trainer):
                 self._scheduler.step()
 
             self._writer.add_scalar("Loss/train/batch", train_loss/train_batch_num, self._batch_num)
-
 
         self._writer.add_scalar("F1/train/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
         

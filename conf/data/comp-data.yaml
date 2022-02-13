@@ -12,6 +12,6 @@ val_data:
 
 test_data:
   _target_: src.datasets.comp_dataset.CompDataset
-  path: ../../data/HeadHunter_test.csv
-  training: True
+  path: ${env:HOME}/hh_boosters_2022/data/HeadHunter_test.csv
+  training: False
   decode_companies: True
