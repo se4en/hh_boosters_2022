@@ -31,9 +31,12 @@ class BaseTrainer(Trainer):
         self._max_len = max_len
         self._use_gpu = use_gpu
         self._num_workers = num_workers
+        
         self._true = []
         self._pred = []
         self._best_val_score = 0.0
+        self._train_loss = 0.0
+        self._train_batch_num = 0
 
         self._merge_feedback = merge_feedback
 
@@ -135,14 +138,13 @@ class BaseTrainer(Trainer):
         self._val_dataloader = DataLoader(self._val_dataset, batch_size=self._batch_size, shuffle=True,
                                           num_workers=self._num_workers, collate_fn=lambda x: x)
 
-        train_loss = 0.0
-        train_batch_num = 0
+        # train_losses = []
         self._true = []
         self._pred = []
         self._model.train()
 
         for batch in self._train_dataloader:
-            train_batch_num += 1
+            self._train_batch_num += 1
             self._batch_num += 1
 
             self._optimizer.zero_grad()
@@ -152,7 +154,9 @@ class BaseTrainer(Trainer):
             loss = self._batch_loss(batch)
 
             loss.backward()
-            train_loss += loss.item()
+            loss_value = loss.item()
+            self._train_loss += loss_value
+            # train_losses.append(loss_value)
 
             # TODO
             # batch_grad_norm = self._rescale_gradients()
@@ -162,7 +166,9 @@ class BaseTrainer(Trainer):
             if self._scheduler:
                 self._scheduler.step()
 
-            self._writer.add_scalar("Loss/train/batch", train_loss/train_batch_num, self._batch_num)
+            # if len(train_losses) > 10:
+            #     train_losses.pop(0)
+            self._writer.add_scalar("Loss/train/batch", self._train_loss/self._train_batch_num, self._batch_num)
 
         self._writer.add_scalar("F1/train/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
         
