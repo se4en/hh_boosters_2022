@@ -8,9 +8,7 @@ from src.utils.utils import get_object, set_seed
 from hydra.utils import instantiate
 
 
-if __name__ == "__main__":
-    experiment_name = sys.argv[1]
-
+def submit(experiment_name: str):
     initialize_config_dir(config_dir=os.path.join(os.path.abspath(os.path.dirname(__file__)), "outputs/", 
                                                   experiment_name, ".hydra"), job_name="predictor")   
     cfg = compose(config_name="config")
@@ -34,3 +32,8 @@ if __name__ == "__main__":
 
     preds = predictor.predict()
     preds.to_csv(os.path.join("outputs/", experiment_name, "submission.csv"), index=False, header=True)
+
+
+if __name__ == "__main__":
+    experiment_name = sys.argv[1]
+    submit(experiment_name)

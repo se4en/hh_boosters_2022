@@ -1,3 +1,4 @@
+from heapq import merge
 import re
 import csv
 from dataclasses import asdict
@@ -33,7 +34,7 @@ class CompDataset(Dataset):
                 #     line = line[:-1]  # remove target
                 if self._training:
                     line[-1] = to_one_hot(list(map(int, line[-1].split(","))))
-                
+
                 self._samples.append(FeedbackInstance(*line))
 
     @staticmethod

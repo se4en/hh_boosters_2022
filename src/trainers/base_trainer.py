@@ -15,7 +15,7 @@ class BaseTrainer(Trainer):
     def __init__(self, model: BertModel, bert_path: str, optimizer = None, train_dataset: Dataset = None, 
                  writer: SummaryWriter = None, val_dataset: Dataset = None, batch_size: int = 16, num_epochs: int = 10, 
                  use_gpu: bool = True, max_len: int = 512, num_workers: int = 0, treshold: float = 0.5, scheduler=None, 
-                 *args, **kwargs):
+                 merge_feedback: bool = False, *args, **kwargs):
         super().__init__(model, *args, **kwargs)
         self._model = model
         self._train_dataset = train_dataset
@@ -33,6 +33,9 @@ class BaseTrainer(Trainer):
         self._num_workers = num_workers
         self._true = []
         self._pred = []
+        self._best_val_score = 0.0
+
+        self._merge_feedback = merge_feedback
 
         dev = "cpu"
         if self._use_gpu:
@@ -98,18 +101,26 @@ class BaseTrainer(Trainer):
 
         pos_texts = []
         neg_texts = []
+        merged_texts = []
 
         for sample in batch:
-            pos_texts.append(sample["positive"])
-            neg_texts.append(sample["negative"])
+            if self._merge_feedback:
+                merged_texts.append(" ".join([sample["positive"], sample["negative"]]))
+            else:
+                pos_texts.append(sample["positive"])
+                neg_texts.append(sample["negative"])
+            
             if batch[0]["target"] is not None:
                 processed_batch["target"].append(sample["target"])
             processed_batch["ratings"].append([sample["salary_rating"], sample["team_rating"], 
                                                sample["managment_rating"], sample["career_rating"], 
                                                sample["workplace_rating"], sample["rest_recovery_rating"]])
 
-        processed_batch["pos_tokens"], processed_batch["pos_mask"] = self._encode_texts(pos_texts)
-        processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(neg_texts)
+        if self._merge_feedback:
+            processed_batch["merged_tokens"], processed_batch["merged_mask"] = self._encode_texts(merged_texts)
+        else: 
+            processed_batch["pos_tokens"], processed_batch["pos_mask"] = self._encode_texts(pos_texts)
+            processed_batch["neg_tokens"], processed_batch["neg_mask"] = self._encode_texts(neg_texts)
    
         processed_batch["ratings"] = torch.LongTensor(processed_batch["ratings"]).to(self._device)
         if batch[0]["target"] is not None:
@@ -173,8 +184,13 @@ class BaseTrainer(Trainer):
             val_loss += loss.item()
 
         self._writer.add_scalar("Loss/val/epoch", val_loss/val_batch_num, epoch)
+        cur_val_score = f1_score(self._true, self._pred, average="samples")
+        self._writer.add_scalar("F1/val/epoch", cur_val_score, epoch)
 
-        self._writer.add_scalar("F1/val/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
+        if cur_val_score >= self._best_val_score:
+            print("Save new best score = {cur_val_score}, epoch = {epoch}")
+            self._best_val_score = cur_val_score
+            torch.save(self._model.state_dict(), "model.pth")
 
     # def _rescale_gradients(self) -> Optional[float]:
     #     if self._grad_norm:

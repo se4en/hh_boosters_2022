@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from hydra.utils import instantiate
 
 from src.utils.utils import set_seed, get_object
+from create_submission import submit
 
 warnings.filterwarnings("ignore")
 
@@ -56,12 +57,7 @@ def run(cfg: DictConfig) -> None:
                           num_epochs=num_epochs, batch_size=batch_size, train_dataset=train_dataset,
                           val_dataset=val_dataset)
 
-    try:
-        trainer.train()
-    finally:
-        # save model
-        model_name = 'model.pth'
-        torch.save(model.state_dict(), model_name)
+    trainer.train()
 
     writer.close()
 
