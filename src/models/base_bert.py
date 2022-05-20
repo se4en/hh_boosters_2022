@@ -1,18 +1,22 @@
+from typing import List, Dict
+
 from transformers import BertModel
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from typing import List, Dict
 import numpy as np
+
+from utils import Attention
 
 
 class BertClassifier(nn.Module):
     def __init__(self, bert_path: str, head: nn.Module, bert_layers_to_freeze: int = 12):
         super().__init__()
-        self._bert = BertModel.from_pretrained(bert_path)
         self._bert_layers_to_freeze = bert_layers_to_freeze
-        self._freeze_bert_layers(self._bert_layers_to_freeze)
+        if bert_path is not None:
+            self._bert = BertModel.from_pretrained(bert_path)
+            self._freeze_bert_layers(self._bert_layers_to_freeze)
 
         self.head = head
         self.loss = torch.nn.BCEWithLogitsLoss()
@@ -46,20 +50,6 @@ class BertClassifier(nn.Module):
 
         return result
     
-    def forward(self, merged_tokens: torch.Tensor, merged_mask: torch.Tensor, ratings: torch.Tensor, 
-                target: torch.Tensor = None) -> dict:
-        merged_outputs = self._bert(merged_tokens, token_type_ids=None, attention_mask=merged_mask)[0]
-
-        logits = self.head(merged_outputs=merged_outputs, merged_mask=merged_mask, ratings=ratings)
-
-        result = {"class_probs": torch.sigmoid(logits)}
-
-        if target is not None:
-            target = target.type_as(logits)
-            result["loss"] = self.loss(logits, target)
-
-        return result
-
 
 class LstmAttention(nn.Module):
     def __init__(self, batch_size: int, pos_lstm: nn.Module, neg_lstm: nn.Module = None, num_classes: int = 9,
@@ -118,28 +108,6 @@ class LstmAttention(nn.Module):
         output_features = self.feedforward(input_features)
         return output_features
 
-    def forward(self, merged_outputs: torch.Tensor, merged_mask: torch.Tensor, ratings: torch.Tensor, 
-                target: torch.Tensor = None) -> torch.Tensor:
-        norm_ratings = ratings/2 - 1.0
-        
-        self._pos_hidden = self.init_pos_hidden()
-
-        X_merged = torch.nn.utils.rnn.pack_padded_sequence(merged_outputs, 
-                                                           torch.count_nonzero(merged_mask, dim=1).cpu(), 
-                                                           batch_first=True, enforce_sorted=False)
-        
-        X_merged, self._pos_hidden = self._pos_lstm(X_merged, self._pos_hidden)
-
-        # undo the packing operation
-        X_merged, _ = torch.nn.utils.rnn.pad_packed_sequence(X_merged, batch_first=True)
-
-        if self._attention:
-            merged_dist, merged_outputs = self._pos_attention(X_merged, return_attn_distribution=True)
-
-        input_features = torch.cat((merged_outputs, norm_ratings), dim=1)
-        output_features = self.feedforward(input_features)
-        return output_features
-
     def init_pos_hidden(self):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         hidden_a = torch.randn(2*self._pos_lstm.num_layers, self.batch_size, self._pos_lstm.hidden_size)
@@ -182,43 +150,3 @@ class ClsMlp(nn.Module):
         output_features = self.feedforward(input_features)
         # class_probs = torch.sigmoid(output_features)
         return output_features
-
-    def forward(self, merged_outputs: torch.Tensor, merged_mask: torch.Tensor, 
-                ratings: torch.Tensor) -> torch.Tensor:
-        norm_ratings = ratings/2 - 1.0
-        input_features = torch.cat((merged_outputs[:, 0, :], norm_ratings), dim=1)  # TODO check dim
-        output_features = self.feedforward(input_features)
-        # class_probs = torch.sigmoid(output_features)
-        return output_features
-
-def new_parameter(*size):
-    out = nn.Parameter(torch.FloatTensor(*size))
-    torch.nn.init.xavier_normal_(out)
-    return out
-
-class Attention(nn.Module):
-    """ Simple multiplicative attention"""
-    def __init__(self, attention_size):
-        super(Attention, self).__init__()
-        self.attention = new_parameter(attention_size, 1)
-
-    def forward(self, x_in, reduction_dim=-2, return_attn_distribution=False):
-        """
-        return_attn_distribution: if True it will also return the original attention distribution
-        this reduces the one before last dimension in x_in to a weighted sum of the last dimension
-        e.g., x_in.shape == [64, 30, 100] -> output.shape == [64, 100]
-        Usage: You have a sentence of shape [batch, sent_len, embedding_dim] and you want to
-            represent sentence to a single vector using attention [batch, embedding_dim]
-        Here we use it to aggregate the lexicon-aware representation of the sentence
-        In two steps we convert [batch, sent_len, num_words_in_category, num_categories] into [batch, num_categories]
-        """
-        # calculate attn weights
-        attn_score = torch.matmul(x_in, self.attention).squeeze()
-        # add one dimension at the end and get a distribution out of scores
-        attn_distrib = F.softmax(attn_score.squeeze(), dim=-1).unsqueeze(-1)
-        scored_x = x_in * attn_distrib
-        weighted_sum = torch.sum(scored_x, dim=reduction_dim)
-        if return_attn_distribution:
-            return attn_distrib.reshape(x_in.shape[0], -1), weighted_sum
-        else:
-            return weighted_sum
