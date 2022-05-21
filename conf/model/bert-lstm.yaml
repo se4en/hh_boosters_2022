@@ -1,6 +1,6 @@
 _target_: src.models.base_bert.BertClassifier
 bert_path: DeepPavlov/rubert-base-cased
-bert_layers_to_freeze: 10
+bert_layers_to_freeze: 6
 head:
   _target_: src.models.base_bert.LstmAttention
   batch_size: ${training.batch_size}
@@ -22,7 +22,12 @@ head:
     dropout: 0
     bidirectional: True
     batch_first: False
-  mlp: 
-    _target_: torch.nn.Linear
-    in_features: 406
-    out_features: ${..num_classes}
+  mlp:
+    _target_: torch.nn.Sequential
+    _args_:
+      - _target_: torch.nn.Dropout
+        p: 0.2
+        
+      - _target_: torch.nn.Linear
+        in_features: 406
+        out_features: ${....num_classes}

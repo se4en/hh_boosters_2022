@@ -2,12 +2,12 @@ defaults:
   - trainer: base-trainer
   - optimizer: adamw
   - scheduler: linear
-  - model: bert-lstm
-  - data: comp-data
+  - model: bert-mlp-2l
+  - data: upd-subm-data
   - training: base-training
 
 general:
-  experiment_name: bert_10l_lstm_epochs_6
+  experiment_name: r2_bert_6l_2l_dropout_5_adamw_epochs_3_subm_new
 
 hydra:
   run:

@@ -1,0 +1,17 @@
+train_data:
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ../../data/HeadHunter_train_upd.csv
+  training: True
+  decode_companies: True
+
+val_data:
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ../../data/HeadHunter_val_upd.csv
+  training: True
+  decode_companies: True
+
+test_data:
+  _target_: src.datasets.comp_dataset.CompDataset
+  path: ${env:HOME}/hh_boosters_2022/data/HeadHunter_test.csv
+  training: False
+  decode_companies: True

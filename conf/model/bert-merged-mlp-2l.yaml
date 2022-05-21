@@ -1,16 +1,16 @@
-_target_: src.models.base_bert.BertClassifier
+_target_: src.models.merged_bert.MergedBertClassifier
 bert_path: DeepPavlov/rubert-base-cased
-bert_layers_to_freeze: 6
+bert_layers_to_freeze: 10
 head:
-  _target_: src.models.base_bert.ClsMlp
-  in_features: 1542
+  _target_: src.models.merged_bert.MergedClsMlp
+  in_features: 774
   num_classes: 9
   mlp:
     _target_: torch.nn.Sequential
     _args_:
       - _target_: torch.nn.Linear
         in_features: ${....in_features}
-        out_features: 800
+        out_features: 200
 
       - _target_: torch.nn.ReLU
 

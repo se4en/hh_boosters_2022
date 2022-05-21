@@ -1,8 +1,8 @@
 defaults:
-  - trainer: base-trainer
+  - trainer: merged-trainer
   - optimizer: adamw
   - scheduler: linear
-  - model: bert-lstm
+  - model: bert-merged-lstm
   - data: comp-data
   - training: base-training
 
