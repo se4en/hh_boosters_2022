@@ -1,8 +1,8 @@
-from heapq import merge
 import re
 import csv
 from dataclasses import asdict
 from typing import Dict, Any
+
 from torch.utils.data import Dataset
 from transformers import PrinterCallback
 
@@ -11,16 +11,21 @@ from src.utils.train_test_split import to_one_hot
 
 
 class CompDataset(Dataset):
-    def __init__(self, path: str, training: bool = True, decode_companies: bool = True):
+    def __init__(self, path: str, training: bool = True, decode_companies: bool = True, detect_xa0: bool = False):
         self._path = path
         self._decode_companies = decode_companies
+        self._detect_xa0 = detect_xa0
         self._samples = []
+        self._xa0s = []
         self._training = training
 
         with open(path, "r") as f:
             reader = csv.reader(f)
             next(reader)  # pass header
             for i, line in enumerate(reader):
+                
+                self._xa0s.append('\xa0' in line[3] and '\xa0' in line[4])
+                
                 # clean data
                 line[0] = int(line[0])
                 line[1:5] = list(map(lambda x: x.replace('\xa0', ' '), line[1:5]))
@@ -46,7 +51,10 @@ class CompDataset(Dataset):
 
     def __getitem__(self, idx) -> Dict[str, Any]:
         sample = self._samples[idx]
-        return asdict(sample)
+        result = asdict(sample)
+        if self._detect_xa0:
+            result["xa0"] = self._xa0s[idx]
+        return result
 
 
 if __name__ == "__main__":
