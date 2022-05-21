@@ -2,7 +2,7 @@ from typing import List, Dict
 
 import torch
 
-from base_bert import BertClassifier, LstmAttention, ClsMlp
+from src.models.base_bert import BertClassifier, LstmAttention, ClsMlp
 
 
 class MergedBertClassifier(BertClassifier):

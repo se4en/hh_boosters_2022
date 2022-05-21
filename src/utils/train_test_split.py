@@ -1,7 +1,9 @@
+from typing import List
+
 import pandas as pd
 import numpy as np
-from typing import List
 from skmultilearn.model_selection import IterativeStratification
+
 
 TRAIN_PATH = "../../data/HeadHunter_train_orig.csv"
 TEST_PATH = "../../data/HeadHunter_test.csv"
@@ -25,7 +27,7 @@ if __name__ == "__main__":
     y = y.apply(lambda x: list(map(int, x.split(",")))).to_numpy()
     y = np.array([to_one_hot(row) for row in y])
 
-    stratifier = IterativeStratification(n_splits=2, order=2, sample_distribution_per_fold=[0.2, 1.0-0.2])
+    stratifier = IterativeStratification(n_splits=2, order=2, sample_distribution_per_fold=[0.2, 1.0-0.2], random_state=422)
     train_indexes, test_indexes = next(stratifier.split(train, y))
 
     new_train = train.iloc[train_indexes, :]
