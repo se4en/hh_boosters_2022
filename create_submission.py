@@ -1,8 +1,8 @@
-import torch
 import os
 import sys
-from hydra import initialize, compose, initialize_config_dir
 
+import torch
+from hydra import initialize, compose, initialize_config_dir
 from src.predictors.base_predictor import Predictor
 from src.utils.utils import get_object, set_seed
 from hydra.utils import instantiate
@@ -23,15 +23,17 @@ def submit(experiment_name: str):
     test_dataset = instantiate(cfg.data.test_data)
 
     # init predictor
-    predictor = Predictor(model=model, trainer=trainer, test_dataset=test_dataset)
+    predictor = Predictor(model=model, trainer=trainer, test_dataset=test_dataset, 
+                          treshold = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
     # load weights
     model.load_state_dict(torch.load(os.path.join("outputs/", experiment_name, "model.pth"), 
                                      map_location=trainer.get_device()))
     model.eval()
 
-    preds = predictor.predict()
+    preds, probs = predictor.predict()
     preds.to_csv(os.path.join("outputs/", experiment_name, "submission.csv"), index=False, header=True)
+    probs.to_csv(os.path.join("outputs/", experiment_name, "probabilities.csv"), index=False, header=True)
 
 
 if __name__ == "__main__":

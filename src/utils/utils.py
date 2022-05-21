@@ -1,23 +1,26 @@
 import importlib
 import os
-import numpy as np
-import torch
 import random
 from typing import Any
-from omegaconf import DictConfig
+
+import numpy as np
+import torch
 
 
 def load_obj(obj_path: str, default_obj_path: str = '') -> Any:
-    """
-    Extract an object from a given path.
+    """Extract an object from a given path.
+    
     https://github.com/quantumblacklabs/kedro/blob/9809bd7ca0556531fa4a2fc02d5b2dc26cf8fa97/kedro/utils.py
-        Args:
-            obj_path: Path to an object to be extracted, including the object name.
-            default_obj_path: Default object path.
-        Returns:
-            Extracted object.
-        Raises:
-            AttributeError: When the object does not have the given named attribute.
+
+    Args:
+        obj_path (str): Path to an object to be extracted, including the object name.
+        default_obj_path (str, optional): Default object path. Defaults to ''.
+
+    Raises:
+        AttributeError: When the object does not have the given named attribute.
+
+    Returns:
+        Any: Extracted object.
     """
     obj_path_list = obj_path.rsplit('.', 1)
     obj_path = obj_path_list.pop(0) if len(obj_path_list) > 1 else default_obj_path
@@ -38,7 +41,19 @@ def set_seed(seed: int = 42) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def get_object(cfg: DictConfig, **kwargs) -> Any:
-    _class = load_obj(cfg.class_name)
-    _instance = _class(**cfg.params, **kwargs)
+def get_object(cfg: dict, **kwargs) -> Any:
+    """Instantiate object from hydra config. 
+    
+    Analog of hydra.utils.instantiate, but without using Omegaconf library.
+    This is required for loading configs inside docker without Omegaconf library.
+
+    Args:
+        cfg (dict): Config with object class name in key '_target_' and constructor arguments.
+
+    Returns:
+        Any: Сreated instance.
+    """
+    _class = load_obj(cfg["_target_"])
+    del cfg["_target_"]
+    _instance = _class(**cfg, **kwargs)
     return _instance

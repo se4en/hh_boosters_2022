@@ -1,27 +1,21 @@
 import os
 import sys
+import warnings
+
 import hydra
 import torch.optim as optim
-import torch
-import logging
-import warnings
 from omegaconf import DictConfig, OmegaConf, open_dict
 from transformers import get_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from hydra.utils import instantiate
 
 from src.utils.utils import set_seed, get_object
-from create_submission import submit
+
 
 warnings.filterwarnings("ignore")
 
-config_name = "local-training"
-# config_name = "test"
-if len(sys.argv) > 1:
-    config_name = sys.argv[1]
 
-
-@hydra.main(config_path="conf", config_name=config_name)
+@hydra.main(config_path="conf", config_name="local-training")
 def run_model(cfg: DictConfig) -> None:
     print(cfg)
     run(cfg)
@@ -41,7 +35,9 @@ def run(cfg: DictConfig) -> None:
 
     # init datasets
     train_dataset = instantiate(cfg.data.train_data)
-    val_dataset = instantiate(cfg.data.val_data)
+    val_dataset = None
+    if "val_data" in cfg.data:
+        val_dataset = instantiate(cfg.data.val_data)
 
     # init optimizer
     optimizer = instantiate(cfg.optimizer, params=model.parameters())
