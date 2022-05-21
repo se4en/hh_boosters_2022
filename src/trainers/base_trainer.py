@@ -4,6 +4,7 @@ import os
 from typing import Dict, Optional, Any, Tuple, List
 
 import torch
+from tqdm import tqdm
 from transformers import Trainer, BertModel, BertTokenizer
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
@@ -148,7 +149,7 @@ class BaseTrainer(Trainer):
         self._pred = []
         self._model.train()
 
-        for batch in self._train_dataloader:
+        for batch in tqdm(self._train_dataloader):
             self._train_batch_num += 1
             self._batch_num += 1
 
