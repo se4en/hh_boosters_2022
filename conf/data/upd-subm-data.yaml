@@ -1,5 +1,5 @@
 train_data:
   _target_: src.datasets.comp_dataset.CompDataset
-  path: ../../data/HeadHunter_train_full.csv
+  path: ${oc.env:PWD}/data/HeadHunter_train_full.csv
   training: True
   decode_companies: True
