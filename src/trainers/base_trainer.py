@@ -1,10 +1,13 @@
+import logging
+import statistics
+import os
 from typing import Dict, Optional, Any, Tuple, List
+
 import torch
 from transformers import Trainer, BertModel, BertTokenizer
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import f1_score
-import logging
 
 from src.utils.train_test_split import to_one_hot
 
@@ -15,13 +18,13 @@ class BaseTrainer(Trainer):
     def __init__(self, model: BertModel, bert_path: str, optimizer = None, train_dataset: Dataset = None, 
                  writer: SummaryWriter = None, val_dataset: Dataset = None, batch_size: int = 16, num_epochs: int = 10, 
                  use_gpu: bool = True, max_len: int = 512, num_workers: int = 0, treshold: float = 0.5, scheduler=None, 
-                 merge_feedback: bool = False, *args, **kwargs):
+                 merge_feedback: bool = False, grad_norm: bool = False, *args, **kwargs):
         super().__init__(model, *args, **kwargs)
         self._model = model
         self._train_dataset = train_dataset
         self._val_dataset = val_dataset
-
-        self._tokenizer = BertTokenizer.from_pretrained(bert_path)
+    
+        self._tokenizer = BertTokenizer.from_pretrained(bert_path, local_files_only=os.path.isdir(bert_path))
         self._optimizer = optimizer
         self._scheduler = scheduler
         self._writer = writer
@@ -31,11 +34,13 @@ class BaseTrainer(Trainer):
         self._max_len = max_len
         self._use_gpu = use_gpu
         self._num_workers = num_workers
+        self._grad_norm = grad_norm
         
         self._true = []
         self._pred = []
         self._best_val_score = 0.0
         self._train_loss = 0.0
+        self._train_losses = []
         self._train_batch_num = 0
 
         self._merge_feedback = merge_feedback
@@ -135,10 +140,10 @@ class BaseTrainer(Trainer):
         # create new dataloaders for data shuffle
         self._train_dataloader = DataLoader(self._train_dataset, batch_size=self._batch_size, shuffle=True,
                                             num_workers=self._num_workers, collate_fn=lambda x: x)
-        self._val_dataloader = DataLoader(self._val_dataset, batch_size=self._batch_size, shuffle=True,
-                                          num_workers=self._num_workers, collate_fn=lambda x: x)
+        if self._val_dataset is not None:
+            self._val_dataloader = DataLoader(self._val_dataset, batch_size=self._batch_size, shuffle=True,
+                                            num_workers=self._num_workers, collate_fn=lambda x: x)
 
-        # train_losses = []
         self._true = []
         self._pred = []
         self._model.train()
@@ -156,7 +161,7 @@ class BaseTrainer(Trainer):
             loss.backward()
             loss_value = loss.item()
             self._train_loss += loss_value
-            # train_losses.append(loss_value)
+            self._train_losses.append(loss_value)
 
             # TODO
             # batch_grad_norm = self._rescale_gradients()
@@ -166,9 +171,11 @@ class BaseTrainer(Trainer):
             if self._scheduler:
                 self._scheduler.step()
 
-            # if len(train_losses) > 10:
-            #     train_losses.pop(0)
-            self._writer.add_scalar("Loss/train/batch", self._train_loss/self._train_batch_num, self._batch_num)
+            if len(self._train_losses) > 100:
+                self._train_losses.pop(0)
+            # self._writer.add_scalar("Loss/train/batch", self._train_loss/self._train_batch_num, self._batch_num)
+            self._writer.add_scalar("Loss/train/batch", statistics.mean(self._train_losses), 
+                                    self._batch_num*self._batch_size)
 
         self._writer.add_scalar("F1/train/epoch", f1_score(self._true, self._pred, average="samples"), epoch)
         
@@ -182,28 +189,75 @@ class BaseTrainer(Trainer):
         self._pred = []
         self._model.eval()
 
-        for batch in self._val_dataloader:
-            val_batch_num += 1
+        if self._val_dataset is not None:
+            for batch in self._val_dataloader:
+                val_batch_num += 1
 
-            batch = self._encode_batch(batch)
-            loss = self._batch_loss(batch)
-            val_loss += loss.item()
+                batch = self._encode_batch(batch)
+                loss = self._batch_loss(batch)
+                val_loss += loss.item()
 
-        self._writer.add_scalar("Loss/val/epoch", val_loss/val_batch_num, epoch)
-        cur_val_score = f1_score(self._true, self._pred, average="samples")
-        self._writer.add_scalar("F1/val/epoch", cur_val_score, epoch)
+            self._writer.add_scalar("Loss/val/epoch", val_loss/val_batch_num, epoch)
+            cur_val_score = f1_score(self._true, self._pred, average="samples")
+            self._writer.add_scalar("F1/val/epoch", cur_val_score, epoch)
 
-        if cur_val_score >= self._best_val_score:
-            print("Save new best score = {cur_val_score}, epoch = {epoch}")
-            self._best_val_score = cur_val_score
+            if cur_val_score >= self._best_val_score:
+                print(f"Save new best score from {self._best_val_score} to {cur_val_score}, epoch = {epoch}")
+                self._best_val_score = cur_val_score
+                torch.save(self._model.state_dict(), "model.pth")
+        else:
             torch.save(self._model.state_dict(), "model.pth")
+    
+    def _rescale_gradients(self) -> Optional[float]:
+        if self._grad_norm:
+            parameters_to_clip = [p for p in self._model.parameters()
+                                  if p.grad is not None]
+            return self.sparse_clip_norm(parameters_to_clip, self._grad_norm)
+        return None
 
-    # def _rescale_gradients(self) -> Optional[float]:
-    #     if self._grad_norm:
-    #         parameters_to_clip = [p for p in self._model.parameters()
-    #                               if p.grad is not None]
-    #         return sparse_clip_norm(parameters_to_clip, self._grad_norm)
-    #     return None
+    #  copied from allennlp.trainer.util
+    def sparse_clip_norm(parameters, max_norm, norm_type=2):
+        """Clips gradient norm of an iterable of parameters.
+        The norm is computed over all gradients together, as if they were
+        concatenated into a single vector. Gradients are modified in-place.
+        Supports sparse gradients.
+        Parameters
+        ----------
+        parameters : ``(Iterable[torch.Tensor])``
+            An iterable of Tensors that will have gradients normalized.
+        max_norm : ``float``
+            The max norm of the gradients.
+        norm_type : ``float``
+            The type of the used p-norm. Can be ``'inf'`` for infinity norm.
+        Returns
+        -------
+        Total norm of the parameters (viewed as a single vector).
+        """
+        # pylint: disable=invalid-name,protected-access
+        parameters = list(filter(lambda p: p.grad is not None, parameters))
+        max_norm = float(max_norm)
+        norm_type = float(norm_type)
+        if norm_type == float('inf'):
+            total_norm = max(p.grad.data.abs().max() for p in parameters)
+        else:
+            total_norm = 0
+            for p in parameters:
+                if p.grad.is_sparse:
+                    # need to coalesce the repeated indices before finding norm
+                    grad = p.grad.data.coalesce()
+                    param_norm = grad._values().norm(norm_type)
+                else:
+                    param_norm = p.grad.data.norm(norm_type)
+                total_norm += param_norm ** norm_type
+            total_norm = total_norm ** (1. / norm_type)
+        clip_coef = max_norm / (total_norm + 1e-6)
+        if clip_coef < 1:
+            for p in parameters:
+                if p.grad.is_sparse:
+                    p.grad.data._values().mul_(clip_coef)
+                else:
+                    p.grad.data.mul_(clip_coef)
+        return total_norm
 
     def train(self):
         self._batch_num = 0
