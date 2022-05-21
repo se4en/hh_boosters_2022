@@ -1,6 +1,6 @@
 **How to reproduce solution:**
 
-1. Download data from competition page[https://boosters.pro/championship/HeadHunter/overview]: 
+1. Download data from competition [page](https://boosters.pro/championship/HeadHunter/overview): 
 
     * Download files from first and second stages and put it in ```data/``` directory.
  
