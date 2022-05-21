@@ -1,7 +1,7 @@
 import importlib
 import os
 import random
-from typing import Any
+from typing import Any, List
 
 import numpy as np
 import torch
@@ -57,3 +57,9 @@ def get_object(cfg: dict, **kwargs) -> Any:
     del cfg["_target_"]
     _instance = _class(**cfg, **kwargs)
     return _instance
+
+
+def to_one_hot(labels: List[int]) -> np.ndarray:
+    res = np.zeros(9)
+    res[labels] = 1
+    return res

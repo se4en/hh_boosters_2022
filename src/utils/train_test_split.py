@@ -1,37 +1,66 @@
-from typing import List
+import os
 
 import pandas as pd
 import numpy as np
 from skmultilearn.model_selection import IterativeStratification
 
-
-TRAIN_PATH = "../../data/HeadHunter_train_orig.csv"
-TEST_PATH = "../../data/HeadHunter_test.csv"
-
-NEW_TRAIN_PATH = "../../data/HeadHunter_train.csv"
-NEW_VAL_PATH = "../../data/HeadHunter_val.csv"
+from src.utils.utils import to_one_hot
 
 
-def to_one_hot(labels: List[int]) -> np.ndarray:
-    res = np.zeros(9)
-    res[labels] = 1
-    return res
+RANDOM_SEED = 422
+
+# round 1
+
+TRAIN_PATH_ORIG = "HeadHunter_train_orig.csv"
+
+TRAIN_PATH = "HeadHunter_train.csv"
+VAL_PATH = "HeadHunter_val.csv"
+
+# round 2
+
+TRAIN_PATH_ORIG_NEW = "HeadHunter_new_train.csv"
+
+TRAIN_PATH_NEW = "HeadHunter_train_upd.csv"
+VAL_PATH_NEW = "HeadHunter_val_upd.csv"
 
 
 if __name__ == "__main__":
-    train = pd.read_csv(TRAIN_PATH)
-    test = pd.read_csv(TEST_PATH)
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
-    y = train['target']
+    # 1 round
+    if os.path.exists(os.path.join(data_dir, TRAIN_PATH_ORIG)):
+        train = pd.read_csv(os.path.join(data_dir, TRAIN_PATH_ORIG))
 
-    y = y.apply(lambda x: list(map(int, x.split(",")))).to_numpy()
-    y = np.array([to_one_hot(row) for row in y])
+        y = train['target']
 
-    stratifier = IterativeStratification(n_splits=2, order=2, sample_distribution_per_fold=[0.2, 1.0-0.2], random_state=422)
-    train_indexes, test_indexes = next(stratifier.split(train, y))
+        y = y.apply(lambda x: list(map(int, x.split(",")))).to_numpy()
+        y = np.array([to_one_hot(row) for row in y])
 
-    new_train = train.iloc[train_indexes, :]
-    new_val = train.iloc[test_indexes, :]
+        stratifier = IterativeStratification(n_splits=2, order=2, sample_distribution_per_fold=[0.2, 1.0-0.2], random_state=RANDOM_SEED)
+        train_indexes, val_indexes = next(stratifier.split(train, y))
 
-    new_train.to_csv(NEW_TRAIN_PATH, index=False, header=True)
-    new_val.to_csv(NEW_VAL_PATH, index=False, header=True)
+        new_train = train.iloc[train_indexes, :]
+        new_val = train.iloc[val_indexes, :]
+
+        new_train.to_csv(os.path.join(data_dir, TRAIN_PATH), index=False, header=True)
+        new_val.to_csv(os.path.join(data_dir, VAL_PATH), index=False, header=True)
+
+        # 2 round
+        if os.path.exists(os.path.join(data_dir, TRAIN_PATH_ORIG_NEW)):
+            train_new = pd.read_csv(os.path.join(data_dir, TRAIN_PATH_ORIG_NEW))
+            
+            train_full = pd.concat([train, train_new])
+
+            y_full = train_full['target']
+
+            y_full = y_full.apply(lambda x: list(map(int, x.split(",")))).to_numpy()
+            y_full = np.array([to_one_hot(row) for row in y_full])
+
+            stratifier = IterativeStratification(n_splits=2, order=2, sample_distribution_per_fold=[0.2, 1.0-0.2], random_state=RANDOM_SEED)
+            train_indexes, val_indexes = next(stratifier.split(train_full, y_full))
+
+            new_train = train.iloc[train_indexes, :]
+            new_val = train.iloc[val_indexes, :]
+
+            new_train.to_csv(os.path.join(data_dir, TRAIN_PATH_NEW), index=False, header=True)
+            new_val.to_csv(os.path.join(data_dir, VAL_PATH_NEW), index=False, header=True)
