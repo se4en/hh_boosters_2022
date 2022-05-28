@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore")
 
 @hydra.main(config_path="conf", config_name="local-training")
 def run_model(cfg: DictConfig) -> None:
-    print(cfg)
+    print(OmegaConf.to_yaml(cfg))
     run(cfg)
 
 

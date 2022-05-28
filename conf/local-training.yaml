@@ -13,5 +13,5 @@ hydra:
   run:
     dir: outputs/${general.experiment_name}
   sweep:
-    dir: outputs/
-    subdir: ${general.experiment_name}
+    dir: outputs/${general.experiment_name}
+    subdir: ${hydra.job.override_dirname}
