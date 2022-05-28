@@ -2,7 +2,7 @@
 
 1. Download data from competition [page](https://boosters.pro/championship/HeadHunter/overview): 
 
-    * Download files from first and second stages and put it in ```data/``` directory.
+    * Download files from [first](https://boosters.pro/championship/HeadHunter/data/employer_review) and [second](https://boosters.pro/championship/HeadHunter/data/employer_review_2) stages and put it in ```data/``` directory.
  
 2. Install packages: 
 
