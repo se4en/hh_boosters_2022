@@ -5,18 +5,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def new_parameter(*size):
+def new_parameter(*size) -> nn.Parameter:
     out = nn.Parameter(torch.FloatTensor(*size))
     torch.nn.init.xavier_normal_(out)
     return out
 
+
 class Attention(nn.Module):
-    """ Simple multiplicative attention"""
+    """Simple multiplicative attention"""
+
     def __init__(self, attention_size):
         super(Attention, self).__init__()
         self.attention = new_parameter(attention_size, 1)
 
-    def forward(self, x_in, reduction_dim=-2, return_attn_distribution=False):
+    def forward(
+        self, x_in, reduction_dim: int = -2, return_attn_distribution: bool = False
+    ):
         """
         return_attn_distribution: if True it will also return the original attention distribution
         this reduces the one before last dimension in x_in to a weighted sum of the last dimension

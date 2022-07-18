@@ -1,28 +1,35 @@
-import os
 from typing import List, Dict, Tuple, Any
 
 import torch
 import torch.nn as nn
 from pandas import DataFrame
-from hydra import initialize, compose, initialize_config_dir
 from transformers import BertTokenizer, Trainer
 from torch.utils.data import DataLoader, Dataset
 
-from src.utils.utils import get_object 
-from src.utils.feedback_instance import FeedbackInstance
-
 
 class Predictor:
-    def __init__(self, model: nn.Module, trainer: Trainer, test_dataset: Dataset, 
-                 treshold: List[float] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]):
+    def __init__(
+        self,
+        model: nn.Module,
+        trainer: Trainer,
+        test_dataset: Dataset,
+        treshold: List[float] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    ):
         self._model = model
         self._trainer = trainer
         self._test_dataset = test_dataset
-        self._test_dataloader = DataLoader(self._test_dataset, batch_size=self._trainer._batch_size, shuffle=False,
-                                           num_workers=self._trainer._num_workers, collate_fn=lambda x: x)
+        self._test_dataloader = DataLoader(
+            self._test_dataset,
+            batch_size=self._trainer._batch_size,
+            shuffle=False,
+            num_workers=self._trainer._num_workers,
+            collate_fn=lambda x: x,
+        )
         self._treshold = torch.FloatTensor(treshold).to(self._trainer._device)
 
-    def predict_batch(self, batch: List[Dict[str, Any]]) -> List[List[int]]:
+    def predict_batch(
+        self, batch: List[Dict[str, Any]]
+    ) -> Tuple[List[List[int]], List[List[float]]]:
         result = []
         res_probs = []
 
@@ -30,12 +37,13 @@ class Predictor:
         output_dict = self._model(**prep_batch)
         class_probs = output_dict["class_probs"]
 
-        # print("class_probs", output_dict["class_probs"])
-
         for i in range(len(batch)):
-            sample_preds = (class_probs[i, :] > self._treshold).nonzero(as_tuple=True)[0]
+            sample_preds = (class_probs[i, :] > self._treshold).nonzero(as_tuple=True)[
+                0
+            ]
             res_probs.append(class_probs[i, :].tolist())
 
+            # some postprocessing
             if "xa0" in batch[i]:
                 if batch[i]["xa0"]:
                     result.append([0])
@@ -43,6 +51,7 @@ class Predictor:
 
             if len(sample_preds) == 0:
                 result.append([torch.argmax(class_probs[i, :]).item()])
+                # some postprocessing
                 # if class_probs[i, 0] > class_probs[i, 8]:
                 #     result.append([0])
                 # else:
@@ -51,16 +60,13 @@ class Predictor:
                 result.append(sample_preds.tolist())
 
         # rows, classes = (class_probs > self._treshold).nonzero(as_tuple=True)
-        
-        # print("\nRows", rows)
-        # print("Classes", classes)
 
         # prev_row = rows[0]
         # buff = [classes[0].item()]
         # for cur_row, cur_class in zip(rows[1:], classes[1:]):
         #     if cur_row == prev_row:
         #         buff.append(cur_class.item())  # add another label
-        #     else: 
+        #     else:
         #         result.append(buff)  # finish previous sample
         #         prev_row = cur_row
         #         buff = []
@@ -71,7 +77,7 @@ class Predictor:
         #                 result.append([best_class])
 
         #         buff.append(cur_class.item())  # add first label for current sample
-        # result.append(buff) 
+        # result.append(buff)
 
         return result, res_probs
 
@@ -90,4 +96,6 @@ class Predictor:
                 predictions.append([sample["review_id"], str_pred])
                 probabilities.append([prob, str_pred])
 
-        return DataFrame(predictions, columns=["review_id", "target"]), DataFrame(probabilities, columns=["probs", "target"])
+        return DataFrame(predictions, columns=["review_id", "target"]), DataFrame(
+            probabilities, columns=["probs", "target"]
+        )

@@ -1,15 +1,12 @@
-import os
-import sys
 import warnings
 
 import hydra
-import torch.optim as optim
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, OmegaConf
 from transformers import get_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from hydra.utils import instantiate
 
-from src.utils.utils import set_seed, get_object
+from src.utils.utils import set_seed
 
 
 warnings.filterwarnings("ignore")
@@ -28,7 +25,7 @@ def run(cfg: DictConfig) -> None:
     set_seed(cfg.training.seed)
 
     # init tensorboard
-    writer = SummaryWriter(f'runs/{cfg.general.experiment_name}')
+    writer = SummaryWriter("run")
 
     # init model
     model = instantiate(cfg.model)
@@ -45,18 +42,29 @@ def run(cfg: DictConfig) -> None:
     # init scheduler
     scheduler = None
     if "scheduler" in cfg:
-        scheduler = get_scheduler(**cfg.scheduler, optimizer=optimizer,
-                                  num_training_steps=num_epochs * int(len(train_dataset) / batch_size))
+        scheduler = get_scheduler(
+            **cfg.scheduler,
+            optimizer=optimizer,
+            num_training_steps=num_epochs * int(len(train_dataset) / batch_size),
+        )
 
     # init trainer
-    trainer = instantiate(cfg.trainer, model=model, optimizer=optimizer, scheduler=scheduler, writer=writer,
-                          num_epochs=num_epochs, batch_size=batch_size, train_dataset=train_dataset,
-                          val_dataset=val_dataset)
+    trainer = instantiate(
+        cfg.trainer,
+        model=model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        writer=writer,
+        num_epochs=num_epochs,
+        batch_size=batch_size,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+    )
 
     trainer.train()
 
     writer.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run_model()
