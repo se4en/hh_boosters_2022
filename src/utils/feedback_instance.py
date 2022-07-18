@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass(init=True)
@@ -15,4 +15,4 @@ class FeedbackInstance:
     career_rating: int
     workplace_rating: int
     rest_recovery_rating: int
-    target: List[int] = None
+    target: Optional[List[int]] = None

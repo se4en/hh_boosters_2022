@@ -11,7 +11,13 @@ from src.utils.train_test_split import to_one_hot
 
 
 class CompDataset(Dataset):
-    def __init__(self, path: str, training: bool = True, decode_companies: bool = True, detect_xa0: bool = False):
+    def __init__(
+        self,
+        path: str,
+        training: bool = True,
+        decode_companies: bool = True,
+        detect_xa0: bool = False,
+    ):
         self._path = path
         self._decode_companies = decode_companies
         self._detect_xa0 = detect_xa0
@@ -23,12 +29,12 @@ class CompDataset(Dataset):
             reader = csv.reader(f)
             next(reader)  # pass header
             for i, line in enumerate(reader):
-                
-                self._xa0s.append('\xa0' in line[3] and '\xa0' in line[4])
-                
+
+                self._xa0s.append("\xa0" in line[3] and "\xa0" in line[4])
+
                 # clean data
                 line[0] = int(line[0])
-                line[1:5] = list(map(lambda x: x.replace('\xa0', ' '), line[1:5]))
+                line[1:5] = list(map(lambda x: x.replace("\xa0", " "), line[1:5]))
                 line[5:11] = list(map(int, line[5:11]))
 
                 if self._decode_companies:
@@ -44,7 +50,7 @@ class CompDataset(Dataset):
 
     @staticmethod
     def _decode_company(text: str) -> str:
-        return re.sub(r'([^\*]|^)\*{6}([^\*|$])', r'\1компания\2', text)
+        return re.sub(r"([^\*]|^)\*{6}([^\*|$])", r"\1компания\2", text)
 
     def __len__(self) -> int:
         return len(self._samples)
